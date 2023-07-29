@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "JackCompiler": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Users\\rderi\\Nand2Tetris\\nand2tetris\\projects\\10\\Main.jack"
+    }
+  }
+}
