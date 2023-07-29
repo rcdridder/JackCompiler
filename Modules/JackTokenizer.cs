@@ -18,7 +18,7 @@ namespace JackCompiler.Modules
             this.sr = sr;
         }
 
-        public bool HasMoreTokens() => sr.BaseStream.Position > -1;
+        public bool HasMoreTokens() => sr.Peek() >= 0;
 
         public Token Advance()
         {
@@ -50,7 +50,7 @@ namespace JackCompiler.Modules
                 if ((char)sr.Peek() == '/') //one line comment
                 {
                     sr.ReadLine();
-                    token.Type = "Comment";
+                    token.Type = "comment";
                     return token;
                 }
                 else if ((char)sr.Peek() == '*') //multiline comment
@@ -67,7 +67,7 @@ namespace JackCompiler.Modules
 
                     if (currentChar == '/')
                     {
-                        token.Type = "Comment";
+                        token.Type = "comment";
                         return token;
                     }
                     else
@@ -75,7 +75,7 @@ namespace JackCompiler.Modules
                 }
                 else //slash symbol
                 {
-                    token.Type = "Symbol";
+                    token.Type = "symbol";
                     token.Value += currentChar;
                     return token;
                 }
@@ -91,7 +91,7 @@ namespace JackCompiler.Modules
             token.Value = string.Empty;
             if (symbols.Contains(currentChar))
             {
-                token.Type = "Symbol";
+                token.Type = "symbol";
                 token.Value += currentChar;
                 return token;
             }
@@ -103,16 +103,15 @@ namespace JackCompiler.Modules
         {
             if (char.IsDigit(currentChar))
             {
-                while (char.IsDigit(currentChar))
+                token.Value += currentChar;
+                while (char.IsDigit((char)sr.Peek()))
                 {
+                    currentChar = (char)sr.Read();
                     token.Value += currentChar;
-                    currentChar = (char)sr.Read();
                 }
-                if (char.IsWhiteSpace(currentChar) || symbols.Contains(currentChar))
+                if (char.IsWhiteSpace((char)sr.Peek()) || symbols.Contains((char)sr.Peek()))
                 {
-                    sr.BaseStream.Position = sr.BaseStream.Position - 2;
-                    currentChar = (char)sr.Read();
-                    token.Type = "IntegerConstant";
+                    token.Type = "integerConstant";
                     return token;
                 }
                 else
@@ -126,20 +125,14 @@ namespace JackCompiler.Modules
         {
             if (currentChar == '"')
             {
-                currentChar = (char)sr.Read();
-                while (currentChar != '"' && currentChar != '\n')
+                while ((char)sr.Peek() != '"' && (char)sr.Peek() != '\n')
                 {
-                    token.Value += currentChar;
                     currentChar = (char)sr.Read();
+                    token.Value += currentChar;
                 }
-
-                if (currentChar == '\n')
-                    throw new Exception("No multiline strings allowed.");
-
-
-                token.Type = "StringConstant";
+                currentChar = (char)sr.Read();
+                token.Type = "stringConstant";
                 return token;
-
             }
             else
                 return token;
@@ -149,22 +142,19 @@ namespace JackCompiler.Modules
         {
             if (char.IsLetter(currentChar) || currentChar == '_')
             {
-                token.Value += currentChar;
-                currentChar = (char)sr.Read();
-                while (char.IsDigit(currentChar) || char.IsLetter(currentChar) || currentChar == '_')
+                while (char.IsDigit((char)sr.Peek()) || char.IsLetter((char)sr.Peek()) || (char)sr.Peek() == '_')
                 {
                     token.Value += currentChar;
                     currentChar = (char)sr.Read();
                 }
+                token.Value += currentChar;
 
-                if (char.IsWhiteSpace(currentChar) || symbols.Contains(currentChar))
+                if (char.IsWhiteSpace((char)sr.Peek()) || symbols.Contains((char)sr.Peek()))
                 {
-                    sr.BaseStream.Position = sr.BaseStream.Position - 2;
-                    currentChar = (char)sr.Read();
                     if (keywords.Contains(token.Value))
-                        token.Type = "Keyword";
+                        token.Type = "keyword";
                     else
-                        token.Type = "Identifier";
+                        token.Type = "identifier";
                     return token;
                 }
                 else

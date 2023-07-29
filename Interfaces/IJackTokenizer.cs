@@ -14,5 +14,6 @@ namespace JackCompiler.Interfaces
         /// </summary>
         /// <returns></returns>
         Token Advance();
+
     }
 }

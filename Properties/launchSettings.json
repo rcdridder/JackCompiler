@@ -2,7 +2,7 @@
   "profiles": {
     "JackCompiler": {
       "commandName": "Project",
-      "commandLineArgs": "C:\\Users\\lobde\\source\\repos\\JackCompilerTestFiles\\Identifier.jack\r\n"
+      "commandLineArgs": "C:\\Users\\lobde\\source\\repos\\JackCompilerTestFiles\\Square\r\n"
     }
   }
 }

@@ -22,10 +22,12 @@ public class Program
             while (tokenizer.HasMoreTokens())
             {
                 Token token = tokenizer.Advance();
+                if (token.Type == "comment")
+                    continue;
                 if (token.Type == null)
                     break;
                 writer.WriteStartElement(token.Type);
-                writer.WriteString(token.Value);
+                writer.WriteString($" {token.Value} ");
                 writer.WriteEndElement();
             }
             writer.WriteEndDocument();
@@ -33,14 +35,33 @@ public class Program
         }
         else if (Directory.Exists(args[0]))
         {
-            string outputFileName = $@"{args[0]}\{Path.GetFileName(args[0])}T.xml";
-            string[] vmFilesInDirectory = Directory.GetFiles($@"{args[0]}", "*.vm");
+
+            string[] vmFilesInDirectory = Directory.GetFiles($@"{args[0]}", "*.jack");
+
             foreach (string file in vmFilesInDirectory)
             {
                 StreamReader sr = new(file);
-                XmlWriter writer = XmlWriter.Create(outputFileName);
+
+                string jackFileName = Path.GetFileNameWithoutExtension(file);
+                string outputFileName = $"{args[0]}/{jackFileName}T.xml";
+                XmlWriter writer = XmlWriter.Create(outputFileName, xmlSettings);
+
+                writer.WriteStartDocument();
+                writer.WriteStartElement("tokens");
                 JackTokenizer tokenizer = new(sr);
-                //call tokenizer
+                while (tokenizer.HasMoreTokens())
+                {
+                    Token token = tokenizer.Advance();
+                    if (token.Type == "comment")
+                        continue;
+                    if (token.Type == null)
+                        break;
+                    writer.WriteStartElement(token.Type);
+                    writer.WriteString($" {token.Value} ");
+                    writer.WriteEndElement();
+                }
+                writer.WriteEndDocument();
+                writer.Close();
             }
         }
         else
