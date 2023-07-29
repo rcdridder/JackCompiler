@@ -1,4 +1,6 @@
-﻿namespace JackCompiler.Interfaces
+﻿using JackCompiler.Modules;
+
+namespace JackCompiler.Interfaces
 {
     public interface IJackTokenizer
     {
@@ -8,18 +10,9 @@
         /// <returns></returns>
         bool HasMoreTokens();
         /// <summary>
-        /// Groups characters from the input file into tokens and determines the type of token. 
-        /// </summary>
-        void Advance();
-        /// <summary>
-        /// Returns the type of the current token.
+        /// Returns next token with value and type.
         /// </summary>
         /// <returns></returns>
-        string TokenType();
-        /// <summary>
-        /// Returns the value of the current token.
-        /// </summary>
-        /// <returns></returns>
-        string TokenValue();
+        Token Advance();
     }
 }

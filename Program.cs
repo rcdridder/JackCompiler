@@ -21,9 +21,12 @@ public class Program
             JackTokenizer tokenizer = new(sr);
             while (tokenizer.HasMoreTokens())
             {
-                tokenizer.Advance();
-                writer.WriteStartElement(tokenizer.TokenType());
-                writer.WriteString(tokenizer.TokenValue());
+                Token token = tokenizer.Advance();
+                if (token.Type == null)
+                    break;
+                writer.WriteStartElement(token.Type);
+                writer.WriteString(token.Value);
+                writer.WriteEndElement();
             }
             writer.WriteEndDocument();
             writer.Close();
