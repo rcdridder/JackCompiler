@@ -92,7 +92,13 @@ namespace JackCompiler.Modules
             if (symbols.Contains(currentChar))
             {
                 token.Type = "symbol";
-                token.Value += currentChar;
+                switch (currentChar)
+                {
+                    case '<': token.Value = "&lt"; break;
+                    case '>': token.Value = "&gt"; break;
+                    case '&': token.Value = "&amp"; break;
+                    default: token.Value += currentChar; break;
+                }
                 return token;
             }
             else
