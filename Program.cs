@@ -11,25 +11,14 @@ public class Program
         if (Path.GetExtension(args[0]) == ".jack")
         {
             string jackFileName = Path.GetFileNameWithoutExtension(args[0]);
-            string outputFileName = $@"{Path.GetDirectoryName(args[0])}\{jackFileName}T.xml";
+            string outputFileName = $"{Path.GetDirectoryName(args[0])}/{jackFileName}.xml";
 
             StreamReader sr = new(args[0]);
             XmlWriter writer = XmlWriter.Create(outputFileName, xmlSettings);
+            CompilationEngine engine = new(sr, writer);
 
             writer.WriteStartDocument();
-            writer.WriteStartElement("tokens");
-            JackTokenizer tokenizer = new(sr);
-            while (tokenizer.HasMoreTokens())
-            {
-                Token token = tokenizer.Advance();
-                if (token.Type == "comment")
-                    continue;
-                if (token.Type == null)
-                    break;
-                writer.WriteStartElement(token.Type);
-                writer.WriteString($" {token.Value} ");
-                writer.WriteEndElement();
-            }
+            engine.CompileClass();
             writer.WriteEndDocument();
             writer.Close();
         }
@@ -40,26 +29,15 @@ public class Program
 
             foreach (string file in vmFilesInDirectory)
             {
-                StreamReader sr = new(file);
-
                 string jackFileName = Path.GetFileNameWithoutExtension(file);
-                string outputFileName = $"{args[0]}/{jackFileName}T.xml";
+                string outputFileName = $"{args[0]}/{jackFileName}.xml";
+
+                StreamReader sr = new(file);
                 XmlWriter writer = XmlWriter.Create(outputFileName, xmlSettings);
+                CompilationEngine engine = new(sr, writer);
 
                 writer.WriteStartDocument();
-                writer.WriteStartElement("tokens");
-                JackTokenizer tokenizer = new(sr);
-                while (tokenizer.HasMoreTokens())
-                {
-                    Token token = tokenizer.Advance();
-                    if (token.Type == "comment")
-                        continue;
-                    if (token.Type == null)
-                        break;
-                    writer.WriteStartElement(token.Type);
-                    writer.WriteString($" {token.Value} ");
-                    writer.WriteEndElement();
-                }
+                engine.CompileClass();
                 writer.WriteEndDocument();
                 writer.Close();
             }

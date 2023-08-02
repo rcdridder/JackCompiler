@@ -2,7 +2,7 @@
   "profiles": {
     "JackCompiler": {
       "commandName": "Project",
-      "commandLineArgs": "C:\\Users\\lobde\\source\\repos\\JackCompilerTestFiles\\Square\r\n"
+      "commandLineArgs": "C:\\Users\\rderi\\Nand2Tetris\\nand2tetris\\projects\\10\\ExpressionLessSquareTest"
     }
   }
 }
