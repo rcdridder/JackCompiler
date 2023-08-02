@@ -63,11 +63,44 @@ namespace JackCompiler.Modules
             writer.WriteStartElement("doStatement");
             ProcessKeywordOrSymbol("do");
             ProcessConstantOrIdentifier("identifier");
-            if (currentToken.Value == ".")
+            if (currentToken.Value == "(")
+            {
+                ProcessKeywordOrSymbol("(");
+                //expressionList start
+                if (currentToken.Type == "identifier")
+                {
+                    ProcessConstantOrIdentifier("identifier");
+                    while (currentToken.Value == ",")
+                    {
+                        ProcessKeywordOrSymbol(",");
+                        ProcessConstantOrIdentifier("identifier");
+                    }
+                }
+                //expressionList end
+                ProcessKeywordOrSymbol(")");
+            }
+            else
+            {
                 ProcessKeywordOrSymbol(".");
-            ProcessKeywordOrSymbol("(");
-            //expressionList
-            ProcessKeywordOrSymbol(")");
+                ProcessConstantOrIdentifier("identifier");
+                ProcessKeywordOrSymbol("(");
+                //expressionList start
+                if (currentToken.Type == "identifier")
+                {
+                    ProcessConstantOrIdentifier("identifier");
+                    while (currentToken.Value == ",")
+                    {
+                        ProcessKeywordOrSymbol(",");
+                        ProcessConstantOrIdentifier("identifier");
+                    }
+                }
+                if (currentToken.Type == "keyword")
+                {
+                    ProcessKeywordOrSymbol(currentToken.Value);
+                }
+                //expressionList end
+                ProcessKeywordOrSymbol(")");
+            }
             ProcessKeywordOrSymbol(";");
             writer.WriteFullEndElement();
         }
@@ -87,7 +120,9 @@ namespace JackCompiler.Modules
             writer.WriteStartElement("ifStatement");
             ProcessKeywordOrSymbol("if");
             ProcessKeywordOrSymbol("(");
-            //expressionList
+            //expression substitute start
+            ProcessConstantOrIdentifier($"{currentToken.Type}");
+            //expression substitute end
             ProcessKeywordOrSymbol(")");
             ProcessKeywordOrSymbol("{");
             CompileStatements();
@@ -107,14 +142,16 @@ namespace JackCompiler.Modules
             writer.WriteStartElement("letStatement");
             ProcessKeywordOrSymbol("let");
             ProcessConstantOrIdentifier("identifier");
-            if (currentToken.Value == "(")
+            if (currentToken.Value == "[")
             {
                 ProcessKeywordOrSymbol("[");
                 //expression
                 ProcessKeywordOrSymbol("]");
             }
             ProcessKeywordOrSymbol("=");
-            //expression
+            //expression substitute start
+            ProcessConstantOrIdentifier($"{currentToken.Type}");
+            //expression substitute end
             ProcessKeywordOrSymbol(";");
             writer.WriteFullEndElement();
         }
@@ -145,7 +182,10 @@ namespace JackCompiler.Modules
         {
             writer.WriteStartElement("returnStatement");
             ProcessKeywordOrSymbol("return");
-            //expression
+            //expression start
+            if (currentToken.Type == "identifier")
+                ProcessConstantOrIdentifier("identifier");
+            //expression end
             ProcessKeywordOrSymbol(";");
             writer.WriteFullEndElement();
         }
@@ -181,6 +221,7 @@ namespace JackCompiler.Modules
             else
                 CompileType();
 
+            ProcessConstantOrIdentifier("identifier");
             ProcessKeywordOrSymbol("(");
             CompileParameterList();
             ProcessKeywordOrSymbol(")");
@@ -218,7 +259,7 @@ namespace JackCompiler.Modules
                 ProcessKeywordOrSymbol(",");
                 ProcessConstantOrIdentifier("identifier");
             }
-            ProcessKeywordOrSymbol("}");
+            ProcessKeywordOrSymbol(";");
             writer.WriteFullEndElement();
         }
 
@@ -227,7 +268,10 @@ namespace JackCompiler.Modules
             writer.WriteStartElement("whileStatement");
             ProcessKeywordOrSymbol("while");
             ProcessKeywordOrSymbol("(");
-            //expression
+            //expression start
+            if (currentToken.Type == "identifier")
+                ProcessConstantOrIdentifier("identifier");
+            //expression end
             ProcessKeywordOrSymbol(")");
             ProcessKeywordOrSymbol("{");
             CompileStatements();
@@ -237,10 +281,6 @@ namespace JackCompiler.Modules
 
         private void ProcessKeywordOrSymbol(string expectedTokenValue)
         {
-            while (currentToken.Type == "comment")
-            {
-                currentToken = tokenizer.Advance();
-            }
             if (currentToken.Type == null)
                 return;
 
@@ -254,14 +294,15 @@ namespace JackCompiler.Modules
                 throw new ArgumentException("Syntax error.");
 
             currentToken = tokenizer.Advance();
-        }
 
-        private void ProcessConstantOrIdentifier(string expectedTokenType)
-        {
             while (currentToken.Type == "comment")
             {
                 currentToken = tokenizer.Advance();
             }
+        }
+
+        private void ProcessConstantOrIdentifier(string expectedTokenType)
+        {
             if (currentToken.Type == null)
                 return;
 
@@ -275,6 +316,11 @@ namespace JackCompiler.Modules
                 throw new ArgumentException("Syntax error.");
 
             currentToken = tokenizer.Advance();
+
+            while (currentToken.Type == "comment")
+            {
+                currentToken = tokenizer.Advance();
+            }
         }
 
         private bool IsClassVarDec() => currentToken.Value == "static" || currentToken.Value == "field";
