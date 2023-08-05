@@ -66,17 +66,7 @@ namespace JackCompiler.Modules
             if (currentToken.Value == "(")
             {
                 ProcessKeywordOrSymbol("(");
-                //expressionList start
-                if (currentToken.Type == "identifier")
-                {
-                    ProcessConstantOrIdentifier("identifier");
-                    while (currentToken.Value == ",")
-                    {
-                        ProcessKeywordOrSymbol(",");
-                        ProcessConstantOrIdentifier("identifier");
-                    }
-                }
-                //expressionList end
+                CompileExpressionList();
                 ProcessKeywordOrSymbol(")");
             }
             else
@@ -84,21 +74,7 @@ namespace JackCompiler.Modules
                 ProcessKeywordOrSymbol(".");
                 ProcessConstantOrIdentifier("identifier");
                 ProcessKeywordOrSymbol("(");
-                //expressionList start
-                if (currentToken.Type == "identifier")
-                {
-                    ProcessConstantOrIdentifier("identifier");
-                    while (currentToken.Value == ",")
-                    {
-                        ProcessKeywordOrSymbol(",");
-                        ProcessConstantOrIdentifier("identifier");
-                    }
-                }
-                if (currentToken.Type == "keyword")
-                {
-                    ProcessKeywordOrSymbol(currentToken.Value);
-                }
-                //expressionList end
+                CompileExpressionList();
                 ProcessKeywordOrSymbol(")");
             }
             ProcessKeywordOrSymbol(";");
@@ -107,12 +83,37 @@ namespace JackCompiler.Modules
 
         public void CompileExpression()
         {
-            throw new NotImplementedException();
+            string[] operands = { "+", "-", "*", "/", "&", "|", "<", ">", "=" };
+
+            writer.WriteStartElement("expression");
+            CompileTerm();
+            while (operands.Contains(currentToken.Value))
+            {
+                ProcessKeywordOrSymbol(currentToken.Value);
+                CompileTerm();
+            }
+            writer.WriteFullEndElement();
         }
 
         public int CompileExpressionList()
         {
-            throw new NotImplementedException();
+            writer.WriteStartElement("expressionList");
+            if (currentToken.Value == ")")
+            {
+                writer.WriteFullEndElement();
+                return 0;
+            }
+            else
+            {
+                CompileExpression();
+                while (currentToken.Value == ",")
+                {
+                    ProcessKeywordOrSymbol(",");
+                    CompileExpression();
+                }
+            }
+            writer.WriteFullEndElement();
+            return 0;
         }
 
         public void CompileIf()
@@ -120,9 +121,7 @@ namespace JackCompiler.Modules
             writer.WriteStartElement("ifStatement");
             ProcessKeywordOrSymbol("if");
             ProcessKeywordOrSymbol("(");
-            //expression substitute start
-            ProcessConstantOrIdentifier($"{currentToken.Type}");
-            //expression substitute end
+            CompileExpression();
             ProcessKeywordOrSymbol(")");
             ProcessKeywordOrSymbol("{");
             CompileStatements();
@@ -145,13 +144,11 @@ namespace JackCompiler.Modules
             if (currentToken.Value == "[")
             {
                 ProcessKeywordOrSymbol("[");
-                //expression
+                CompileExpression();
                 ProcessKeywordOrSymbol("]");
             }
             ProcessKeywordOrSymbol("=");
-            //expression substitute start
-            ProcessConstantOrIdentifier($"{currentToken.Type}");
-            //expression substitute end
+            CompileExpression();
             ProcessKeywordOrSymbol(";");
             writer.WriteFullEndElement();
         }
@@ -182,11 +179,13 @@ namespace JackCompiler.Modules
         {
             writer.WriteStartElement("returnStatement");
             ProcessKeywordOrSymbol("return");
-            //expression start
-            if (currentToken.Type == "identifier")
-                ProcessConstantOrIdentifier("identifier");
-            //expression end
-            ProcessKeywordOrSymbol(";");
+            if (currentToken.Value == ";")
+                ProcessKeywordOrSymbol(";");
+            else
+            {
+                CompileExpression();
+                ProcessKeywordOrSymbol(";");
+            }
             writer.WriteFullEndElement();
         }
 
@@ -245,7 +244,9 @@ namespace JackCompiler.Modules
 
         public void CompileTerm()
         {
-            throw new NotImplementedException();
+            writer.WriteStartElement("term");
+            ProcessConstantOrIdentifier($"{currentToken.Type}");
+            writer.WriteFullEndElement();
         }
 
         public void CompileVarDec()
@@ -268,10 +269,7 @@ namespace JackCompiler.Modules
             writer.WriteStartElement("whileStatement");
             ProcessKeywordOrSymbol("while");
             ProcessKeywordOrSymbol("(");
-            //expression start
-            if (currentToken.Type == "identifier")
-                ProcessConstantOrIdentifier("identifier");
-            //expression end
+            CompileExpression();
             ProcessKeywordOrSymbol(")");
             ProcessKeywordOrSymbol("{");
             CompileStatements();
