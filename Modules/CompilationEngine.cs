@@ -62,21 +62,7 @@ namespace JackCompiler.Modules
         {
             writer.WriteStartElement("doStatement");
             ProcessKeywordOrSymbol("do");
-            ProcessConstantOrIdentifier("identifier");
-            if (currentToken.Value == "(")
-            {
-                ProcessKeywordOrSymbol("(");
-                CompileExpressionList();
-                ProcessKeywordOrSymbol(")");
-            }
-            else
-            {
-                ProcessKeywordOrSymbol(".");
-                ProcessConstantOrIdentifier("identifier");
-                ProcessKeywordOrSymbol("(");
-                CompileExpressionList();
-                ProcessKeywordOrSymbol(")");
-            }
+            CompileExpression();
             ProcessKeywordOrSymbol(";");
             writer.WriteFullEndElement();
         }
@@ -97,23 +83,26 @@ namespace JackCompiler.Modules
 
         public int CompileExpressionList()
         {
+            int expressionCount = 0;
             writer.WriteStartElement("expressionList");
             if (currentToken.Value == ")")
             {
                 writer.WriteFullEndElement();
-                return 0;
+                return expressionCount;
             }
             else
             {
                 CompileExpression();
+                expressionCount++;
                 while (currentToken.Value == ",")
                 {
                     ProcessKeywordOrSymbol(",");
                     CompileExpression();
+                    expressionCount++;
                 }
             }
             writer.WriteFullEndElement();
-            return 0;
+            return expressionCount;
         }
 
         public void CompileIf()
@@ -244,8 +233,56 @@ namespace JackCompiler.Modules
 
         public void CompileTerm()
         {
+            string[] keywordConstants = { "true", "false", "null", "this" };
+
             writer.WriteStartElement("term");
-            ProcessConstantOrIdentifier($"{currentToken.Type}");
+            if (currentToken.Type == "integerConstant" || currentToken.Type == "stringConstant")
+            {
+                ProcessConstantOrIdentifier(currentToken.Type);
+            }
+            else if (keywordConstants.Contains(currentToken.Value))
+            {
+                ProcessKeywordOrSymbol(currentToken.Value);
+            }
+            else if (currentToken.Value == "-" || currentToken.Value == "~")
+            {
+                ProcessKeywordOrSymbol(currentToken.Value);
+                CompileTerm();
+            }
+            else if (currentToken.Value == "(")
+            {
+                ProcessKeywordOrSymbol("(");
+                CompileExpression();
+                ProcessKeywordOrSymbol(")");
+            }
+            else if (currentToken.Type == "identifier")
+            {
+                ProcessConstantOrIdentifier("identifier");
+                if (currentToken.Value == "[")
+                {
+                    ProcessKeywordOrSymbol("[");
+                    CompileExpression();
+                    ProcessKeywordOrSymbol("]");
+                }
+                if (currentToken.Value == "(")
+                {
+                    ProcessKeywordOrSymbol("(");
+                    CompileExpressionList();
+                    ProcessKeywordOrSymbol(")");
+                }
+                if (currentToken.Value == ".")
+                {
+                    ProcessKeywordOrSymbol(".");
+                    ProcessConstantOrIdentifier("identifier");
+                    ProcessKeywordOrSymbol("(");
+                    CompileExpressionList();
+                    ProcessKeywordOrSymbol(")");
+                }
+            }
+            else
+            {
+                throw new ArgumentException("Syntax error");
+            }
             writer.WriteFullEndElement();
         }
 
