@@ -1,4 +1,5 @@
-﻿using JackCompiler.Interfaces;
+﻿using JackCompiler.Entities;
+using JackCompiler.Interfaces;
 
 namespace JackCompiler.Modules
 {

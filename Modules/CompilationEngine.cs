@@ -1,4 +1,5 @@
-﻿using JackCompiler.Interfaces;
+﻿using JackCompiler.Entities;
+using JackCompiler.Interfaces;
 using System.Xml;
 
 namespace JackCompiler.Modules
@@ -8,6 +9,9 @@ namespace JackCompiler.Modules
         XmlWriter writer;
         JackTokenizer tokenizer;
         Token currentToken;
+        SymbolTable classTable = new SymbolTable();
+        SymbolTable subroutineTable = new SymbolTable();
+        string currentClassName;
 
         public CompilationEngine(StreamReader sr, XmlWriter writer)
         {
@@ -22,8 +26,10 @@ namespace JackCompiler.Modules
 
         public void CompileClass()
         {
+            classTable.Reset();
             writer.WriteStartElement("class");
             ProcessKeywordOrSymbol("class");
+            currentClassName = currentToken.Value;
             ProcessConstantOrIdentifier("identifier");
             ProcessKeywordOrSymbol("{");
             while (IsClassVarDec())
@@ -41,17 +47,26 @@ namespace JackCompiler.Modules
         public void CompileClassVarDec()
         {
             writer.WriteStartElement("classVarDec");
+            Symbol symbol = new();
 
             if (IsClassVarDec())
+            {
+                symbol.Kind = currentToken.Value;
                 ProcessKeywordOrSymbol(currentToken.Value);
+            }
             else
                 throw new ArgumentException("Syntax error.");
 
+            symbol.Type = currentToken.Value;
             CompileType();
+            symbol.Name = currentToken.Value;
+            classTable.Define(symbol.Name, symbol.Type, symbol.Kind);
             ProcessConstantOrIdentifier("identifier");
             while (currentToken.Value == ",")
             {
                 ProcessKeywordOrSymbol(",");
+                symbol.Name = currentToken.Value;
+                classTable.Define(symbol.Name, symbol.Type, symbol.Kind);
                 ProcessConstantOrIdentifier("identifier");
             }
             ProcessKeywordOrSymbol(";");
@@ -129,7 +144,7 @@ namespace JackCompiler.Modules
         {
             writer.WriteStartElement("letStatement");
             ProcessKeywordOrSymbol("let");
-            ProcessConstantOrIdentifier("identifier");
+            ProcessConstantOrIdentifier("identifier", true);
             if (currentToken.Value == "[")
             {
                 ProcessKeywordOrSymbol("[");
@@ -144,6 +159,7 @@ namespace JackCompiler.Modules
 
         public void CompileParameterList()
         {
+            Symbol symbol = new();
             writer.WriteStartElement("parameterList");
             if (currentToken.Value == ")")
             {
@@ -152,12 +168,18 @@ namespace JackCompiler.Modules
             }
             else
             {
+                symbol.Type = currentToken.Value;
                 CompileType();
+                symbol.Name = currentToken.Value;
+                subroutineTable.Define(symbol.Name, symbol.Type, "arg");
                 ProcessConstantOrIdentifier("identifier");
                 while (currentToken.Value == ",")
                 {
                     ProcessKeywordOrSymbol(",");
+                    symbol.Type = currentToken.Value;
                     CompileType();
+                    symbol.Name = currentToken.Value;
+                    subroutineTable.Define(symbol.Name, symbol.Type, "arg");
                     ProcessConstantOrIdentifier("identifier");
                 }
                 writer.WriteFullEndElement();
@@ -198,9 +220,18 @@ namespace JackCompiler.Modules
 
         public void CompileSubroutineDec()
         {
+            subroutineTable.Reset();
             writer.WriteStartElement("subroutineDec");
             if (IsSubroutineDec())
-                ProcessKeywordOrSymbol(currentToken.Value);
+            {
+                if (currentToken.Value == "method")
+                {
+                    subroutineTable.Define("this", currentClassName, "arg");
+                    ProcessKeywordOrSymbol(currentToken.Value);
+                }
+                else
+                    ProcessKeywordOrSymbol(currentToken.Value);
+            }
             else
                 throw new ArgumentException("Syntax error.");
 
@@ -257,7 +288,7 @@ namespace JackCompiler.Modules
             }
             else if (currentToken.Type == "identifier")
             {
-                ProcessConstantOrIdentifier("identifier");
+                ProcessConstantOrIdentifier("identifier", true);
                 if (currentToken.Value == "[")
                 {
                     ProcessKeywordOrSymbol("[");
@@ -273,7 +304,7 @@ namespace JackCompiler.Modules
                 if (currentToken.Value == ".")
                 {
                     ProcessKeywordOrSymbol(".");
-                    ProcessConstantOrIdentifier("identifier");
+                    ProcessConstantOrIdentifier("identifier", true);
                     ProcessKeywordOrSymbol("(");
                     CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
@@ -288,13 +319,20 @@ namespace JackCompiler.Modules
 
         public void CompileVarDec()
         {
+            Symbol symbol = new();
             writer.WriteStartElement("varDec");
+            symbol.Kind = currentToken.Value;
             ProcessKeywordOrSymbol("var");
+            symbol.Type = currentToken.Value;
             CompileType();
+            symbol.Name = currentToken.Value;
+            subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
             ProcessConstantOrIdentifier("identifier");
             while (currentToken.Value == ",")
             {
                 ProcessKeywordOrSymbol(",");
+                symbol.Name = currentToken.Value;
+                subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
                 ProcessConstantOrIdentifier("identifier");
             }
             ProcessKeywordOrSymbol(";");
@@ -313,7 +351,11 @@ namespace JackCompiler.Modules
             ProcessKeywordOrSymbol("}");
             writer.WriteFullEndElement();
         }
-
+        /// <summary>
+        /// Processes a Keyword or Symbol and advances the tokenizer.
+        /// </summary>
+        /// <param name="expectedTokenValue"></param>
+        /// <exception cref="ArgumentException"></exception>
         private void ProcessKeywordOrSymbol(string expectedTokenValue)
         {
             if (currentToken.Type == null)
@@ -335,8 +377,12 @@ namespace JackCompiler.Modules
                 currentToken = tokenizer.Advance();
             }
         }
-
-        private void ProcessConstantOrIdentifier(string expectedTokenType)
+        /// <summary>
+        /// Processes constant or identifier and advances the tokenizer
+        /// </summary>
+        /// <param name="expectedTokenType"></param>
+        /// <exception cref="ArgumentException"></exception>
+        private void ProcessConstantOrIdentifier(string expectedTokenType, bool isDeclared = false)
         {
             if (currentToken.Type == null)
                 return;
@@ -344,6 +390,34 @@ namespace JackCompiler.Modules
             if (currentToken.Type == expectedTokenType)
             {
                 writer.WriteStartElement($"{currentToken.Type}");
+                if (currentToken.Type == "identifier")
+                {
+                    string identifier = currentToken.Value;
+                    writer.WriteAttributeString("name", identifier);
+                    if (Char.IsUpper(identifier[0]))
+                    {
+                        writer.WriteAttributeString("category", "class");
+                    }
+                    else if (subroutineTable.SymbolExists(identifier))
+                    {
+                        writer.WriteAttributeString("category", subroutineTable.KindOf(identifier));
+                        writer.WriteAttributeString("index", subroutineTable.IndexOf(identifier).ToString());
+                    }
+                    else if (classTable.SymbolExists(identifier))
+                    {
+                        writer.WriteAttributeString("category", classTable.KindOf(identifier));
+                        writer.WriteAttributeString("index", classTable.IndexOf(identifier).ToString());
+                    }
+                    else
+                    {
+                        writer.WriteAttributeString("category", "subroutine");
+                    }
+                }
+
+                if (isDeclared)
+                    writer.WriteAttributeString("usage", "used");
+                else
+                    writer.WriteAttributeString("usage", "declared");
                 writer.WriteString($" {currentToken.Value} ");
                 writer.WriteFullEndElement();
             }
