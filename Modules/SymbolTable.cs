@@ -42,34 +42,21 @@ namespace JackCompiler.Modules
             }
         }
 
-        public int VarCount(string kind)
-        {
-            return symbolTable.Where(s => s.Kind == kind).Count();
-        }
+        public int VarCount(string kind) => symbolTable.Where(s => s.Kind == kind).Count();
 
         public string KindOf(string name)
         {
             Symbol searchResult = symbolTable.Find(s => s.Name == name);
 
             if (searchResult == null)
-            {
                 return "NONE";
-            }
             else
-            {
                 return searchResult.Kind;
-            }
         }
 
-        public string TypeOf(string name)
-        {
-            return symbolTable.Find(s => s.Name == name).Type;
-        }
+        public string TypeOf(string name) => symbolTable.Find(s => s.Name == name).Type;
 
-        public int IndexOf(string name)
-        {
-            return symbolTable.Find(s => s.Name == name).Index;
-        }
+        public int IndexOf(string name) => symbolTable.Find(s => s.Name == name).Index;
 
         public bool SymbolExists(string name) => symbolTable.Exists(s => s.Name == name);
     }
