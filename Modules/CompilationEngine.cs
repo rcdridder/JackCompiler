@@ -11,6 +11,9 @@ namespace JackCompiler.Modules
         SymbolTable classTable = new SymbolTable();
         SymbolTable subroutineTable = new SymbolTable();
         string? currentClassName;
+        string? currentSubroutineName;
+        int currentSubroutineVars = 0;
+        int labelCount = 0;
 
         public CompilationEngine(StreamReader reader, StreamWriter writer)
         {
@@ -72,6 +75,7 @@ namespace JackCompiler.Modules
         {
             ProcessKeywordOrSymbol("do");
             CompileExpression();
+            writer.WritePop("temp", 0);
             ProcessKeywordOrSymbol(";");
         }
 
@@ -123,25 +127,39 @@ namespace JackCompiler.Modules
 
         public void CompileIf()
         {
+            string ifNotLabel = $"IfNot{currentClassName}{labelCount}";
+            labelCount++;
+
             ProcessKeywordOrSymbol("if");
             ProcessKeywordOrSymbol("(");
             CompileExpression();
             ProcessKeywordOrSymbol(")");
+            writer.WriteArithmetic("not");
+            writer.WriteIf(ifNotLabel);
             ProcessKeywordOrSymbol("{");
             CompileStatements();
             ProcessKeywordOrSymbol("}");
+
             if (currentToken.Value == "else")
             {
+                string endLabel = $"EndIf{currentClassName}{labelCount}";
+                writer.WriteGoto(endLabel);
+                writer.WriteLabel(ifNotLabel);
                 ProcessKeywordOrSymbol("else");
                 ProcessKeywordOrSymbol("{");
                 CompileStatements();
                 ProcessKeywordOrSymbol("}");
+                writer.WriteLabel(endLabel);
             }
+            else
+                writer.WriteLabel(ifNotLabel);
+
         }
 
         public void CompileLet()
         {
             ProcessKeywordOrSymbol("let");
+            string varName = currentToken.Value;
             ProcessConstantOrIdentifier("identifier", true);
             if (currentToken.Value == "[")
             {
@@ -151,6 +169,7 @@ namespace JackCompiler.Modules
             }
             ProcessKeywordOrSymbol("=");
             CompileExpression();
+            writer.WritePop(FindSegment(varName), FindIndex(varName));
             ProcessKeywordOrSymbol(";");
         }
 
@@ -215,6 +234,7 @@ namespace JackCompiler.Modules
         public void CompileSubroutineDec()
         {
             subroutineTable.Reset();
+
             if (IsSubroutineDec())
             {
                 if (currentToken.Value == "method")
@@ -233,6 +253,7 @@ namespace JackCompiler.Modules
             else
                 CompileType();
 
+            currentSubroutineName = currentToken.Value;
             ProcessConstantOrIdentifier("identifier");
             ProcessKeywordOrSymbol("(");
             CompileParameterList();
@@ -247,9 +268,10 @@ namespace JackCompiler.Modules
             {
                 CompileVarDec();
             }
+            writer.WriteFunction($"{currentClassName}.{currentSubroutineName}", currentSubroutineVars);
             CompileStatements();
             ProcessKeywordOrSymbol("}");
-
+            currentSubroutineVars = 0;
         }
 
         public void CompileTerm()
@@ -276,7 +298,10 @@ namespace JackCompiler.Modules
             {
                 switch (currentToken.Value)
                 {
-                    case "true": writer.WritePush("constant", -1); break;
+                    case "true":
+                        writer.WritePush("constant", 1);
+                        writer.WriteArithmetic("neg");
+                        break;
                     case "false": case "null": writer.WritePush("constant", 0); break;
                     case "this": writer.WritePush("pointer", 0); break;
                 }
@@ -284,15 +309,15 @@ namespace JackCompiler.Modules
             }
             else if (currentToken.Value == "-")
             {
-                writer.WriteArithmetic("neg");
                 ProcessKeywordOrSymbol(currentToken.Value);
                 CompileTerm();
+                writer.WriteArithmetic("neg");
             }
             else if (currentToken.Value == "~")
             {
-                writer.WriteArithmetic("not");
                 ProcessKeywordOrSymbol(currentToken.Value);
                 CompileTerm();
+                writer.WriteArithmetic("not");
             }
             else if (currentToken.Value == "(")
             {
@@ -302,6 +327,7 @@ namespace JackCompiler.Modules
             }
             else if (currentToken.Type == "identifier")
             {
+                string identifier = currentToken.Value;
                 ProcessConstantOrIdentifier("identifier", true);
                 if (currentToken.Value == "[")
                 {
@@ -318,13 +344,15 @@ namespace JackCompiler.Modules
                 else if (currentToken.Value == ".")
                 {
                     ProcessKeywordOrSymbol(".");
+                    string functionName = currentToken.Value;
                     ProcessConstantOrIdentifier("identifier", true);
                     ProcessKeywordOrSymbol("(");
-                    CompileExpressionList();
+                    int argCount = CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
+                    writer.WriteCall($"{identifier}.{functionName}", argCount);
                 }
                 else
-                    writer.WritePush(FindSegment(currentToken.Value), FindIndex(currentToken.Value));
+                    writer.WritePush(FindSegment(identifier), FindIndex(identifier));
             }
             else
             {
@@ -341,30 +369,36 @@ namespace JackCompiler.Modules
             CompileType();
             symbol.Name = currentToken.Value;
             subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
+            currentSubroutineVars++;
             ProcessConstantOrIdentifier("identifier");
             while (currentToken.Value == ",")
             {
                 ProcessKeywordOrSymbol(",");
                 symbol.Name = currentToken.Value;
                 subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
+                currentSubroutineVars++;
                 ProcessConstantOrIdentifier("identifier");
             }
             ProcessKeywordOrSymbol(";");
-            int x = 0;
-            int y = 1;
-            y = 1 + x++;
-            y = 1 + ++x;
         }
 
         public void CompileWhile()
         {
+            string whileLabel = $"While{currentClassName}{labelCount}";
+            string endLabel = $"EndWhile{currentClassName}{labelCount}";
+            labelCount++;
             ProcessKeywordOrSymbol("while");
+            writer.WriteLabel(whileLabel);
             ProcessKeywordOrSymbol("(");
             CompileExpression();
             ProcessKeywordOrSymbol(")");
+            writer.WriteArithmetic("not");
+            writer.WriteIf(endLabel);
             ProcessKeywordOrSymbol("{");
             CompileStatements();
             ProcessKeywordOrSymbol("}");
+            writer.WriteGoto(whileLabel);
+            writer.WriteLabel(endLabel);
         }
 
         private void ProcessKeywordOrSymbol(string expectedTokenValue)
@@ -424,8 +458,8 @@ namespace JackCompiler.Modules
             {
                 { "static", "static" },
                 { "field", "this" },
-                { "arg", "arg" },
-                { "var", "lcl" },
+                { "arg", "argument" },
+                { "var", "local" },
             };
             if (subroutineTable.SymbolExists(identifier))
                 return kindToSegment[subroutineTable.KindOf(identifier)];
