@@ -13,6 +13,7 @@ namespace JackCompiler.Modules
         string? currentClassName;
         string? currentSubroutineName;
         int labelCount = 0;
+        bool isConstructor, isMethod = false;
 
         public CompilationEngine(StreamReader reader, StreamWriter writer)
         {
@@ -238,7 +239,13 @@ namespace JackCompiler.Modules
             {
                 if (currentToken.Value == "method")
                 {
+                    isMethod = true;
                     subroutineTable.Define("this", currentClassName, "arg");
+                    ProcessKeywordOrSymbol(currentToken.Value);
+                }
+                else if (currentToken.Value == "constructor")
+                {
+                    isConstructor = true;
                     ProcessKeywordOrSymbol(currentToken.Value);
                 }
                 else
@@ -268,6 +275,19 @@ namespace JackCompiler.Modules
                 CompileVarDec();
             }
             writer.WriteFunction($"{currentClassName}.{currentSubroutineName}", subroutineTable.VarCount("var"));
+            if (isConstructor)
+            {
+                writer.WritePush("constant", classTable.VarCount("field"));
+                writer.WriteCall("Memory.alloc", 1);
+                writer.WritePop("pointer", 0);
+                isConstructor = false;
+            }
+            else if (isMethod)
+            {
+                writer.WritePush("argument", 0);
+                writer.WritePop("pointer", 0);
+                isMethod = false;
+            }
             CompileStatements();
             ProcessKeywordOrSymbol("}");
         }
@@ -336,8 +356,10 @@ namespace JackCompiler.Modules
                 else if (currentToken.Value == "(")
                 {
                     ProcessKeywordOrSymbol("(");
-                    CompileExpressionList();
+                    int argCount = CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
+                    writer.WritePush("pointer", 0);
+                    writer.WriteCall($"{currentClassName}.{identifier}", argCount + 1);
                 }
                 else if (currentToken.Value == ".")
                 {
@@ -347,7 +369,15 @@ namespace JackCompiler.Modules
                     ProcessKeywordOrSymbol("(");
                     int argCount = CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
-                    writer.WriteCall($"{identifier}.{functionName}", argCount);
+                    if (subroutineTable.SymbolExists(identifier) || classTable.SymbolExists(identifier))
+                    {
+                        writer.WritePush($"{FindSegment(identifier)}", FindIndex(identifier));
+                        writer.WriteCall($"{FindType(identifier)}.{functionName}", argCount + 1);
+                    }
+                    else
+                    {
+                        writer.WriteCall($"{identifier}.{functionName}", argCount);
+                    }
                 }
                 else
                     writer.WritePush(FindSegment(identifier), FindIndex(identifier));
@@ -473,6 +503,16 @@ namespace JackCompiler.Modules
                 return classTable.IndexOf(identifier);
             else
                 throw new ArgumentException("Identifier not declared.");
+        }
+
+        private string FindType(string identifier)
+        {
+            if (subroutineTable.SymbolExists(identifier))
+                return subroutineTable.TypeOf(identifier);
+            else if (classTable.SymbolExists(identifier))
+                return classTable.TypeOf(identifier);
+            else
+                return currentClassName;
         }
     }
 }
