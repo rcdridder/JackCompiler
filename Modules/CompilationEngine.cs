@@ -12,7 +12,6 @@ namespace JackCompiler.Modules
         SymbolTable subroutineTable = new SymbolTable();
         string? currentClassName;
         string? currentSubroutineName;
-        int currentSubroutineVars = 0;
         int labelCount = 0;
 
         public CompilationEngine(StreamReader reader, StreamWriter writer)
@@ -268,10 +267,9 @@ namespace JackCompiler.Modules
             {
                 CompileVarDec();
             }
-            writer.WriteFunction($"{currentClassName}.{currentSubroutineName}", currentSubroutineVars);
+            writer.WriteFunction($"{currentClassName}.{currentSubroutineName}", subroutineTable.VarCount("var"));
             CompileStatements();
             ProcessKeywordOrSymbol("}");
-            currentSubroutineVars = 0;
         }
 
         public void CompileTerm()
@@ -369,14 +367,12 @@ namespace JackCompiler.Modules
             CompileType();
             symbol.Name = currentToken.Value;
             subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
-            currentSubroutineVars++;
             ProcessConstantOrIdentifier("identifier");
             while (currentToken.Value == ",")
             {
                 ProcessKeywordOrSymbol(",");
                 symbol.Name = currentToken.Value;
                 subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
-                currentSubroutineVars++;
                 ProcessConstantOrIdentifier("identifier");
             }
             ProcessKeywordOrSymbol(";");
