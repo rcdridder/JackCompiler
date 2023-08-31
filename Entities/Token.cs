@@ -1,4 +1,4 @@
-﻿namespace JackCompiler.Modules
+﻿namespace JackCompiler.Entities
 {
     public class Token
     {

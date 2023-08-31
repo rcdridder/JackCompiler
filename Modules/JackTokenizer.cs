@@ -1,10 +1,11 @@
-﻿using JackCompiler.Interfaces;
+﻿using JackCompiler.Entities;
+using JackCompiler.Interfaces;
 
 namespace JackCompiler.Modules
 {
     public class JackTokenizer : IJackTokenizer
     {
-        private StreamReader sr;
+        private StreamReader reader;
         private char[] symbols = { '{', '}', '(', ')', '[', ']', '.', ',', ';',
                 '+', '-', '*', '/', '&', '|', '<', '>', '=', '~' };
         private string[] tokenTypes = { "keyword", "symbol", "identifier", "integerConstant", "stringConstant " };
@@ -15,15 +16,15 @@ namespace JackCompiler.Modules
 
         public JackTokenizer(StreamReader sr)
         {
-            this.sr = sr;
+            this.reader = sr;
         }
 
-        public bool HasMoreTokens() => sr.Peek() >= 0;
+        public bool HasMoreTokens() => reader.Peek() >= 0;
 
         public Token Advance()
         {
             Token token = new Token();
-            currentChar = (char)sr.Read();
+            currentChar = (char)reader.Read();
 
             if (IsCommentOrWhiteSpace(token).Type != null)
                 return token;
@@ -42,28 +43,28 @@ namespace JackCompiler.Modules
         {
             while (char.IsWhiteSpace(currentChar))
             {
-                currentChar = (char)sr.Read();
+                currentChar = (char)reader.Read();
             }
 
             if (currentChar == '/')
             {
-                if ((char)sr.Peek() == '/') //one line comment
+                if ((char)reader.Peek() == '/') //one line comment
                 {
-                    sr.ReadLine();
+                    reader.ReadLine();
                     token.Type = "comment";
                     return token;
                 }
-                else if ((char)sr.Peek() == '*') //multiline comment
+                else if ((char)reader.Peek() == '*') //multiline comment
                 {
-                    currentChar = (char)sr.Read();
+                    currentChar = (char)reader.Read();
 
                 StillComment:
                     while (currentChar != '*')
                     {
-                        currentChar = (char)sr.Read();
+                        currentChar = (char)reader.Read();
                     }
 
-                    currentChar = (char)sr.Read();
+                    currentChar = (char)reader.Read();
 
                     if (currentChar == '/')
                     {
@@ -104,12 +105,12 @@ namespace JackCompiler.Modules
             if (char.IsDigit(currentChar))
             {
                 token.Value += currentChar;
-                while (char.IsDigit((char)sr.Peek()))
+                while (char.IsDigit((char)reader.Peek()))
                 {
-                    currentChar = (char)sr.Read();
+                    currentChar = (char)reader.Read();
                     token.Value += currentChar;
                 }
-                if (char.IsWhiteSpace((char)sr.Peek()) || symbols.Contains((char)sr.Peek()))
+                if (char.IsWhiteSpace((char)reader.Peek()) || symbols.Contains((char)reader.Peek()))
                 {
                     token.Type = "integerConstant";
                     return token;
@@ -125,12 +126,12 @@ namespace JackCompiler.Modules
         {
             if (currentChar == '"')
             {
-                while ((char)sr.Peek() != '"' && (char)sr.Peek() != '\n')
+                while ((char)reader.Peek() != '"' && (char)reader.Peek() != '\n')
                 {
-                    currentChar = (char)sr.Read();
+                    currentChar = (char)reader.Read();
                     token.Value += currentChar;
                 }
-                currentChar = (char)sr.Read();
+                currentChar = (char)reader.Read();
                 token.Type = "stringConstant";
                 return token;
             }
@@ -142,14 +143,14 @@ namespace JackCompiler.Modules
         {
             if (char.IsLetter(currentChar) || currentChar == '_')
             {
-                while (char.IsDigit((char)sr.Peek()) || char.IsLetter((char)sr.Peek()) || (char)sr.Peek() == '_')
+                while (char.IsDigit((char)reader.Peek()) || char.IsLetter((char)reader.Peek()) || (char)reader.Peek() == '_')
                 {
                     token.Value += currentChar;
-                    currentChar = (char)sr.Read();
+                    currentChar = (char)reader.Read();
                 }
                 token.Value += currentChar;
 
-                if (char.IsWhiteSpace((char)sr.Peek()) || symbols.Contains((char)sr.Peek()))
+                if (char.IsWhiteSpace((char)reader.Peek()) || symbols.Contains((char)reader.Peek()))
                 {
                     if (keywords.Contains(token.Value))
                         token.Type = "keyword";

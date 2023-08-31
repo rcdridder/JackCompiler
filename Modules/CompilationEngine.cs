@@ -1,18 +1,24 @@
-﻿using JackCompiler.Interfaces;
-using System.Xml;
+﻿using JackCompiler.Entities;
+using JackCompiler.Interfaces;
 
 namespace JackCompiler.Modules
 {
     public class CompilationEngine : ICompilationEngine
     {
-        XmlWriter writer;
         JackTokenizer tokenizer;
+        VMWriter writer;
         Token currentToken;
+        SymbolTable classTable = new SymbolTable();
+        SymbolTable subroutineTable = new SymbolTable();
+        string? currentClassName;
+        string? currentSubroutineName;
+        int labelCount = 0;
+        bool isConstructor, isMethod = false;
 
-        public CompilationEngine(StreamReader sr, XmlWriter writer)
+        public CompilationEngine(StreamReader reader, StreamWriter writer)
         {
-            this.writer = writer;
-            tokenizer = new JackTokenizer(sr);
+            tokenizer = new JackTokenizer(reader);
+            this.writer = new VMWriter(writer);
             currentToken = tokenizer.Advance();
             while (currentToken.Type == "comment")
             {
@@ -22,8 +28,9 @@ namespace JackCompiler.Modules
 
         public void CompileClass()
         {
-            writer.WriteStartElement("class");
+            classTable.Reset();
             ProcessKeywordOrSymbol("class");
+            currentClassName = currentToken.Value;
             ProcessConstantOrIdentifier("identifier");
             ProcessKeywordOrSymbol("{");
             while (IsClassVarDec())
@@ -35,59 +42,73 @@ namespace JackCompiler.Modules
                 CompileSubroutineDec();
             }
             ProcessKeywordOrSymbol("}");
-            writer.WriteFullEndElement();
         }
 
         public void CompileClassVarDec()
         {
-            writer.WriteStartElement("classVarDec");
+            Symbol symbol = new();
 
             if (IsClassVarDec())
+            {
+                symbol.Kind = currentToken.Value;
                 ProcessKeywordOrSymbol(currentToken.Value);
+            }
             else
                 throw new ArgumentException("Syntax error.");
 
+            symbol.Type = currentToken.Value;
             CompileType();
+            symbol.Name = currentToken.Value;
+            classTable.Define(symbol.Name, symbol.Type, symbol.Kind);
             ProcessConstantOrIdentifier("identifier");
             while (currentToken.Value == ",")
             {
                 ProcessKeywordOrSymbol(",");
+                symbol.Name = currentToken.Value;
+                classTable.Define(symbol.Name, symbol.Type, symbol.Kind);
                 ProcessConstantOrIdentifier("identifier");
             }
             ProcessKeywordOrSymbol(";");
-            writer.WriteFullEndElement();
         }
 
         public void CompileDo()
         {
-            writer.WriteStartElement("doStatement");
             ProcessKeywordOrSymbol("do");
             CompileExpression();
+            writer.WritePop("temp", 0);
             ProcessKeywordOrSymbol(";");
-            writer.WriteFullEndElement();
         }
 
         public void CompileExpression()
         {
             string[] operands = { "+", "-", "*", "/", "&", "|", "<", ">", "=" };
 
-            writer.WriteStartElement("expression");
             CompileTerm();
             while (operands.Contains(currentToken.Value))
             {
+                string operand = currentToken.Value;
                 ProcessKeywordOrSymbol(currentToken.Value);
                 CompileTerm();
+                switch (operand)
+                {
+                    case "+": writer.WriteArithmetic("add"); break;
+                    case "-": writer.WriteArithmetic("sub"); break;
+                    case "*": writer.WriteCall("Math.multiply", 2); break;
+                    case "/": writer.WriteCall("Math.divide", 2); break;
+                    case "&": writer.WriteArithmetic("and"); break;
+                    case "|": writer.WriteArithmetic("or"); break;
+                    case "<": writer.WriteArithmetic("lt"); break;
+                    case ">": writer.WriteArithmetic("gt"); break;
+                    case "=": writer.WriteArithmetic("eq"); break;
+                }
             }
-            writer.WriteFullEndElement();
         }
 
         public int CompileExpressionList()
         {
             int expressionCount = 0;
-            writer.WriteStartElement("expressionList");
             if (currentToken.Value == ")")
             {
-                writer.WriteFullEndElement();
                 return expressionCount;
             }
             else
@@ -101,87 +122,116 @@ namespace JackCompiler.Modules
                     expressionCount++;
                 }
             }
-            writer.WriteFullEndElement();
             return expressionCount;
         }
 
         public void CompileIf()
         {
-            writer.WriteStartElement("ifStatement");
+            string ifNotLabel = $"IfNot{currentClassName}{labelCount}";
+            labelCount++;
+
             ProcessKeywordOrSymbol("if");
             ProcessKeywordOrSymbol("(");
             CompileExpression();
             ProcessKeywordOrSymbol(")");
+            writer.WriteArithmetic("not");
+            writer.WriteIf(ifNotLabel);
             ProcessKeywordOrSymbol("{");
             CompileStatements();
             ProcessKeywordOrSymbol("}");
+
             if (currentToken.Value == "else")
             {
+                string endLabel = $"EndIf{currentClassName}{labelCount}";
+                writer.WriteGoto(endLabel);
+                writer.WriteLabel(ifNotLabel);
                 ProcessKeywordOrSymbol("else");
                 ProcessKeywordOrSymbol("{");
                 CompileStatements();
                 ProcessKeywordOrSymbol("}");
+                writer.WriteLabel(endLabel);
             }
-            writer.WriteFullEndElement();
+            else
+                writer.WriteLabel(ifNotLabel);
+
         }
 
         public void CompileLet()
         {
-            writer.WriteStartElement("letStatement");
+            bool isArray = false;
             ProcessKeywordOrSymbol("let");
-            ProcessConstantOrIdentifier("identifier");
+            string varName = currentToken.Value;
+            ProcessConstantOrIdentifier("identifier", true);
             if (currentToken.Value == "[")
             {
+                isArray = true;
                 ProcessKeywordOrSymbol("[");
+                writer.WritePush(FindSegment(varName), FindIndex(varName));
                 CompileExpression();
+                writer.WriteArithmetic("add");
                 ProcessKeywordOrSymbol("]");
             }
             ProcessKeywordOrSymbol("=");
             CompileExpression();
+            if (isArray)
+            {
+                writer.WritePop("temp", 0);
+                writer.WritePop("pointer", 1);
+                writer.WritePush("temp", 0);
+                writer.WritePop("that", 0);
+            }
+            else
+            {
+                writer.WritePop(FindSegment(varName), FindIndex(varName));
+            }
             ProcessKeywordOrSymbol(";");
-            writer.WriteFullEndElement();
         }
 
         public void CompileParameterList()
         {
-            writer.WriteStartElement("parameterList");
+            Symbol symbol = new();
             if (currentToken.Value == ")")
             {
-                writer.WriteFullEndElement();
                 return;
             }
             else
             {
+                symbol.Type = currentToken.Value;
                 CompileType();
+                symbol.Name = currentToken.Value;
+                subroutineTable.Define(symbol.Name, symbol.Type, "arg");
                 ProcessConstantOrIdentifier("identifier");
                 while (currentToken.Value == ",")
                 {
                     ProcessKeywordOrSymbol(",");
+                    symbol.Type = currentToken.Value;
                     CompileType();
+                    symbol.Name = currentToken.Value;
+                    subroutineTable.Define(symbol.Name, symbol.Type, "arg");
                     ProcessConstantOrIdentifier("identifier");
                 }
-                writer.WriteFullEndElement();
             }
         }
 
         public void CompileReturn()
         {
-            writer.WriteStartElement("returnStatement");
             ProcessKeywordOrSymbol("return");
             if (currentToken.Value == ";")
+            {
+                writer.WriteReturn();
                 ProcessKeywordOrSymbol(";");
+            }
             else
             {
                 CompileExpression();
+                writer.WriteReturn();
                 ProcessKeywordOrSymbol(";");
             }
-            writer.WriteFullEndElement();
         }
 
         public void CompileStatements()
         {
             string[] statements = { "let", "if", "while", "do", "return" };
-            writer.WriteStartElement("statements");
             while (statements.Contains(currentToken.Value))
             {
                 switch (currentToken.Value)
@@ -193,14 +243,28 @@ namespace JackCompiler.Modules
                     case "return": CompileReturn(); break;
                 }
             }
-            writer.WriteFullEndElement();
         }
 
         public void CompileSubroutineDec()
         {
-            writer.WriteStartElement("subroutineDec");
+            subroutineTable.Reset();
+
             if (IsSubroutineDec())
-                ProcessKeywordOrSymbol(currentToken.Value);
+            {
+                if (currentToken.Value == "method")
+                {
+                    isMethod = true;
+                    subroutineTable.Define("this", currentClassName, "arg");
+                    ProcessKeywordOrSymbol(currentToken.Value);
+                }
+                else if (currentToken.Value == "constructor")
+                {
+                    isConstructor = true;
+                    ProcessKeywordOrSymbol(currentToken.Value);
+                }
+                else
+                    ProcessKeywordOrSymbol(currentToken.Value);
+            }
             else
                 throw new ArgumentException("Syntax error.");
 
@@ -209,45 +273,83 @@ namespace JackCompiler.Modules
             else
                 CompileType();
 
+            currentSubroutineName = currentToken.Value;
             ProcessConstantOrIdentifier("identifier");
             ProcessKeywordOrSymbol("(");
             CompileParameterList();
             ProcessKeywordOrSymbol(")");
             CompileSubroutineBody();
-            writer.WriteFullEndElement();
         }
 
         public void CompileSubroutineBody()
         {
-            writer.WriteStartElement("subroutineBody");
             ProcessKeywordOrSymbol("{");
             while (currentToken.Value == "var")
             {
                 CompileVarDec();
             }
+            writer.WriteFunction($"{currentClassName}.{currentSubroutineName}", subroutineTable.VarCount("var"));
+            if (isConstructor)
+            {
+                writer.WritePush("constant", classTable.VarCount("field"));
+                writer.WriteCall("Memory.alloc", 1);
+                writer.WritePop("pointer", 0);
+                isConstructor = false;
+            }
+            else if (isMethod)
+            {
+                writer.WritePush("argument", 0);
+                writer.WritePop("pointer", 0);
+                isMethod = false;
+            }
             CompileStatements();
             ProcessKeywordOrSymbol("}");
-
-            writer.WriteFullEndElement();
         }
 
         public void CompileTerm()
         {
             string[] keywordConstants = { "true", "false", "null", "this" };
 
-            writer.WriteStartElement("term");
-            if (currentToken.Type == "integerConstant" || currentToken.Type == "stringConstant")
+            if (currentToken.Type == "integerConstant")
             {
+                writer.WritePush("constant", Convert.ToInt32(currentToken.Value));
+                ProcessConstantOrIdentifier(currentToken.Type);
+            }
+            else if (currentToken.Type == "stringConstant")
+            {
+                writer.WritePush("constant", currentToken.Value.Length);
+                writer.WriteCall("String.new", 1);
+                foreach (char c in currentToken.Value)
+                {
+                    writer.WritePush("constant", c);
+                    writer.WriteCall("String.appendChar", 2);
+                }
                 ProcessConstantOrIdentifier(currentToken.Type);
             }
             else if (keywordConstants.Contains(currentToken.Value))
             {
+                switch (currentToken.Value)
+                {
+                    case "true":
+                        writer.WritePush("constant", 1);
+                        writer.WriteArithmetic("neg");
+                        break;
+                    case "false": case "null": writer.WritePush("constant", 0); break;
+                    case "this": writer.WritePush("pointer", 0); break;
+                }
                 ProcessKeywordOrSymbol(currentToken.Value);
             }
-            else if (currentToken.Value == "-" || currentToken.Value == "~")
+            else if (currentToken.Value == "-")
             {
                 ProcessKeywordOrSymbol(currentToken.Value);
                 CompileTerm();
+                writer.WriteArithmetic("neg");
+            }
+            else if (currentToken.Value == "~")
+            {
+                ProcessKeywordOrSymbol(currentToken.Value);
+                CompileTerm();
+                writer.WriteArithmetic("not");
             }
             else if (currentToken.Value == "(")
             {
@@ -257,61 +359,93 @@ namespace JackCompiler.Modules
             }
             else if (currentToken.Type == "identifier")
             {
-                ProcessConstantOrIdentifier("identifier");
+                string identifier = currentToken.Value;
+                ProcessConstantOrIdentifier("identifier", true);
                 if (currentToken.Value == "[")
                 {
                     ProcessKeywordOrSymbol("[");
+                    writer.WritePush(FindSegment(identifier), FindIndex(identifier));
                     CompileExpression();
+                    writer.WriteArithmetic("add");
+                    writer.WritePop("pointer", 1);
+                    writer.WritePush("that", 0);
                     ProcessKeywordOrSymbol("]");
                 }
-                if (currentToken.Value == "(")
+                else if (currentToken.Value == "(")
                 {
                     ProcessKeywordOrSymbol("(");
-                    CompileExpressionList();
+                    writer.WritePush("pointer", 0);
+                    int argCount = CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
+                    writer.WriteCall($"{currentClassName}.{identifier}", argCount + 1);
                 }
-                if (currentToken.Value == ".")
+                else if (currentToken.Value == ".")
                 {
                     ProcessKeywordOrSymbol(".");
-                    ProcessConstantOrIdentifier("identifier");
+                    string functionName = currentToken.Value;
+                    ProcessConstantOrIdentifier("identifier", true);
                     ProcessKeywordOrSymbol("(");
-                    CompileExpressionList();
+                    if (subroutineTable.SymbolExists(identifier) || classTable.SymbolExists(identifier))
+                    {
+                        writer.WritePush($"{FindSegment(identifier)}", FindIndex(identifier));
+                    }
+                    int argCount = CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
+                    if (subroutineTable.SymbolExists(identifier) || classTable.SymbolExists(identifier))
+                    {
+                        writer.WriteCall($"{FindType(identifier)}.{functionName}", argCount + 1);
+                    }
+                    else
+                    {
+                        writer.WriteCall($"{identifier}.{functionName}", argCount);
+                    }
                 }
+                else
+                    writer.WritePush(FindSegment(identifier), FindIndex(identifier));
             }
             else
             {
                 throw new ArgumentException("Syntax error");
             }
-            writer.WriteFullEndElement();
         }
 
         public void CompileVarDec()
         {
-            writer.WriteStartElement("varDec");
+            Symbol symbol = new();
+            symbol.Kind = currentToken.Value;
             ProcessKeywordOrSymbol("var");
+            symbol.Type = currentToken.Value;
             CompileType();
+            symbol.Name = currentToken.Value;
+            subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
             ProcessConstantOrIdentifier("identifier");
             while (currentToken.Value == ",")
             {
                 ProcessKeywordOrSymbol(",");
+                symbol.Name = currentToken.Value;
+                subroutineTable.Define(symbol.Name, symbol.Type, symbol.Kind);
                 ProcessConstantOrIdentifier("identifier");
             }
             ProcessKeywordOrSymbol(";");
-            writer.WriteFullEndElement();
         }
 
         public void CompileWhile()
         {
-            writer.WriteStartElement("whileStatement");
+            string whileLabel = $"While{currentClassName}{labelCount}";
+            string endLabel = $"EndWhile{currentClassName}{labelCount}";
+            labelCount++;
             ProcessKeywordOrSymbol("while");
+            writer.WriteLabel(whileLabel);
             ProcessKeywordOrSymbol("(");
             CompileExpression();
             ProcessKeywordOrSymbol(")");
+            writer.WriteArithmetic("not");
+            writer.WriteIf(endLabel);
             ProcessKeywordOrSymbol("{");
             CompileStatements();
             ProcessKeywordOrSymbol("}");
-            writer.WriteFullEndElement();
+            writer.WriteGoto(whileLabel);
+            writer.WriteLabel(endLabel);
         }
 
         private void ProcessKeywordOrSymbol(string expectedTokenValue)
@@ -320,15 +454,9 @@ namespace JackCompiler.Modules
                 return;
 
             if (currentToken.Value == expectedTokenValue)
-            {
-                writer.WriteStartElement($"{currentToken.Type}");
-                writer.WriteString($" {expectedTokenValue} ");
-                writer.WriteFullEndElement();
-            }
+                currentToken = tokenizer.Advance();
             else
                 throw new ArgumentException("Syntax error.");
-
-            currentToken = tokenizer.Advance();
 
             while (currentToken.Type == "comment")
             {
@@ -336,21 +464,15 @@ namespace JackCompiler.Modules
             }
         }
 
-        private void ProcessConstantOrIdentifier(string expectedTokenType)
+        private void ProcessConstantOrIdentifier(string expectedTokenType, bool isDeclared = false)
         {
             if (currentToken.Type == null)
                 return;
 
             if (currentToken.Type == expectedTokenType)
-            {
-                writer.WriteStartElement($"{currentToken.Type}");
-                writer.WriteString($" {currentToken.Value} ");
-                writer.WriteFullEndElement();
-            }
+                currentToken = tokenizer.Advance();
             else
                 throw new ArgumentException("Syntax error.");
-
-            currentToken = tokenizer.Advance();
 
             while (currentToken.Type == "comment")
             {
@@ -375,6 +497,43 @@ namespace JackCompiler.Modules
                 ProcessConstantOrIdentifier(currentToken.Type);
             else
                 throw new ArgumentException("Syntax error.");
+        }
+
+        private string FindSegment(string identifier)
+        {
+            Dictionary<string, string> kindToSegment = new()
+            {
+                { "static", "static" },
+                { "field", "this" },
+                { "arg", "argument" },
+                { "var", "local" },
+            };
+            if (subroutineTable.SymbolExists(identifier))
+                return kindToSegment[subroutineTable.KindOf(identifier)];
+            else if (classTable.SymbolExists(identifier))
+                return kindToSegment[classTable.KindOf(identifier)];
+            else
+                throw new ArgumentException("Identifier not declared.");
+        }
+
+        private int FindIndex(string identifier)
+        {
+            if (subroutineTable.SymbolExists(identifier))
+                return subroutineTable.IndexOf(identifier);
+            else if (classTable.SymbolExists(identifier))
+                return classTable.IndexOf(identifier);
+            else
+                throw new ArgumentException("Identifier not declared.");
+        }
+
+        private string FindType(string identifier)
+        {
+            if (subroutineTable.SymbolExists(identifier))
+                return subroutineTable.TypeOf(identifier);
+            else if (classTable.SymbolExists(identifier))
+                return classTable.TypeOf(identifier);
+            else
+                return currentClassName;
         }
     }
 }
