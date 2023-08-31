@@ -308,7 +308,7 @@ namespace JackCompiler.Modules
                 foreach (char c in currentToken.Value)
                 {
                     writer.WritePush("constant", c);
-                    writer.WriteCall("String.appendChar", 1);
+                    writer.WriteCall("String.appendChar", 2);
                 }
                 ProcessConstantOrIdentifier(currentToken.Type);
             }
