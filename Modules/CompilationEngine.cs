@@ -158,18 +158,32 @@ namespace JackCompiler.Modules
 
         public void CompileLet()
         {
+            bool isArray = false;
             ProcessKeywordOrSymbol("let");
             string varName = currentToken.Value;
             ProcessConstantOrIdentifier("identifier", true);
             if (currentToken.Value == "[")
             {
+                isArray = true;
                 ProcessKeywordOrSymbol("[");
+                writer.WritePush(FindSegment(varName), FindIndex(varName));
                 CompileExpression();
+                writer.WriteArithmetic("add");
                 ProcessKeywordOrSymbol("]");
             }
             ProcessKeywordOrSymbol("=");
             CompileExpression();
-            writer.WritePop(FindSegment(varName), FindIndex(varName));
+            if (isArray)
+            {
+                writer.WritePop("temp", 0);
+                writer.WritePop("pointer", 1);
+                writer.WritePush("temp", 0);
+                writer.WritePop("that", 0);
+            }
+            else
+            {
+                writer.WritePop(FindSegment(varName), FindIndex(varName));
+            }
             ProcessKeywordOrSymbol(";");
         }
 
@@ -350,7 +364,11 @@ namespace JackCompiler.Modules
                 if (currentToken.Value == "[")
                 {
                     ProcessKeywordOrSymbol("[");
+                    writer.WritePush(FindSegment(identifier), FindIndex(identifier));
                     CompileExpression();
+                    writer.WriteArithmetic("add");
+                    writer.WritePop("pointer", 1);
+                    writer.WritePush("that", 0);
                     ProcessKeywordOrSymbol("]");
                 }
                 else if (currentToken.Value == "(")
