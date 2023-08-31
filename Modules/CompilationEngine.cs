@@ -374,9 +374,9 @@ namespace JackCompiler.Modules
                 else if (currentToken.Value == "(")
                 {
                     ProcessKeywordOrSymbol("(");
+                    writer.WritePush("pointer", 0);
                     int argCount = CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
-                    writer.WritePush("pointer", 0);
                     writer.WriteCall($"{currentClassName}.{identifier}", argCount + 1);
                 }
                 else if (currentToken.Value == ".")
@@ -385,11 +385,14 @@ namespace JackCompiler.Modules
                     string functionName = currentToken.Value;
                     ProcessConstantOrIdentifier("identifier", true);
                     ProcessKeywordOrSymbol("(");
+                    if (subroutineTable.SymbolExists(identifier) || classTable.SymbolExists(identifier))
+                    {
+                        writer.WritePush($"{FindSegment(identifier)}", FindIndex(identifier));
+                    }
                     int argCount = CompileExpressionList();
                     ProcessKeywordOrSymbol(")");
                     if (subroutineTable.SymbolExists(identifier) || classTable.SymbolExists(identifier))
                     {
-                        writer.WritePush($"{FindSegment(identifier)}", FindIndex(identifier));
                         writer.WriteCall($"{FindType(identifier)}.{functionName}", argCount + 1);
                     }
                     else
