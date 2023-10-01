@@ -16,10 +16,10 @@ public class Program
 
             engine.CompileClass();
             writer.Close();
+            Console.WriteLine($"{jackFileName}.jack compiled succesfully!");
         }
         else if (Directory.Exists(args[0]))
         {
-
             string[] vmFilesInDirectory = Directory.GetFiles($@"{args[0]}", "*.jack");
 
             foreach (string file in vmFilesInDirectory)
@@ -33,7 +33,9 @@ public class Program
 
                 engine.CompileClass();
                 writer.Close();
+                Console.WriteLine($"{jackFileName}.jack compiled succesfully!");
             }
+            Console.WriteLine($"All jack files in {args[0]} are compiled!");
         }
         else
             throw new ArgumentException("Invalid file or directory.");

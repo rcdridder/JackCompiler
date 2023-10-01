@@ -127,7 +127,8 @@ namespace JackCompiler.Modules
 
         public void CompileIf()
         {
-            string ifNotLabel = $"IfNot{currentClassName}{labelCount}";
+            string ifFalse = $"IfFalse{currentClassName}{labelCount}";
+            string ifEnd = $"EndIf{currentClassName}{labelCount}";
             labelCount++;
 
             ProcessKeywordOrSymbol("if");
@@ -135,25 +136,23 @@ namespace JackCompiler.Modules
             CompileExpression();
             ProcessKeywordOrSymbol(")");
             writer.WriteArithmetic("not");
-            writer.WriteIf(ifNotLabel);
+            writer.WriteIf(ifFalse);
+
             ProcessKeywordOrSymbol("{");
             CompileStatements();
             ProcessKeywordOrSymbol("}");
+            writer.WriteGoto(ifEnd);
 
+            writer.WriteLabel(ifFalse);
             if (currentToken.Value == "else")
             {
-                string endLabel = $"EndIf{currentClassName}{labelCount}";
-                writer.WriteGoto(endLabel);
-                writer.WriteLabel(ifNotLabel);
                 ProcessKeywordOrSymbol("else");
                 ProcessKeywordOrSymbol("{");
                 CompileStatements();
                 ProcessKeywordOrSymbol("}");
-                writer.WriteLabel(endLabel);
+                writer.WriteLabel(ifEnd);
             }
-            else
-                writer.WriteLabel(ifNotLabel);
-
+            writer.WriteLabel(ifEnd);
         }
 
         public void CompileLet()
@@ -161,6 +160,10 @@ namespace JackCompiler.Modules
             bool isArray = false;
             ProcessKeywordOrSymbol("let");
             string varName = currentToken.Value;
+            if (!subroutineTable.SymbolExists(varName) && !classTable.SymbolExists(varName))
+            {
+                throw new ArgumentException($"{varName} is not declared in subroutine or class");
+            }
             ProcessConstantOrIdentifier("identifier", true);
             if (currentToken.Value == "[")
             {
